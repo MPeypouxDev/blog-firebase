@@ -337,6 +337,24 @@ textarea {
     margin: 20px auto;
 }
 
+.message-success {
+    background: #d4edda;
+    color: #155724;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 10px 0;
+    border: 1px solid #c3e6cb;
+}
+
+.message-error {
+    background: #f8d7da;
+    color: #721c24;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 10px 0;
+    border: 1px solid #f5c6cb;
+}
+
 /* =====================
    RESPONSIVE
    ===================== */

@@ -242,18 +242,18 @@ async function handleArticleSubmit(e) {
         return;
     }
 
-    const name = auth.currentUser.displayName;
+    const name = auth.currentUser.displayName || auth.currentUser.email || "Anonyme";
     const articleData = {
         title: title,
         content: content,
         userName: name,
-        Timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         isPublished: isPublished,
     }
 
     try {
         await db.collection('articles').add(articleData);
-        showMessage("Articles crée avec succès", "success")
+        showMessage("Article créé avec succès", "success");
         closeModal('articleModal');
         document.getElementById("articleForm").reset();
     } catch (error) {
