@@ -19,6 +19,35 @@ let currentEditingArticle = null; // Article en cours d'édition
 let isAdmin = false;             // Statut admin
 let isLoadingArticles = false;   // Flag de chargement
 
+// MODAL
+function openModal(modalId) {
+    const modal = document.getElementById(modalId);
+    modal.style.display = "block";
+}
+
+function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    modal.style.display = "none";
+}
+
+function showMessage(message, type) {
+    const container = document.getElementById("messageContainer");
+    if(!message) {
+        return;
+    }
+   const content = document.createElement("div");
+   content.textContent = message;
+   container.appendChild(content);
+   if (type === "success") {
+    content.className = "message-success";
+   } else if (type === "error") {
+    content.className = "message-error";
+   }
+   setTimeout(() => {
+    content.remove();
+   }, 3000)
+}
+
 // OBSERVER D'AUTHENTIFICATION
 auth.onAuthStateChanged(async (user) => {
     currentUser = user;
