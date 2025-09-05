@@ -27,7 +27,6 @@ function openModal(modalId) {
 
 function closeModal(modalId) {
     const modal = document.getElementById(modalId);
-    modal.addEventListener('click');
     modal.classList.remove('active');
 }
 
@@ -264,6 +263,9 @@ async function handleArticleSubmit(e) {
 }
 
 async function loadArticles() {
+    if (isLoadingArticles) return;
+    isLoadingArticles = true;
+
     const container = document.getElementById('articlesContainer');
     container.innerHTML = "";
        try {
@@ -276,6 +278,15 @@ async function loadArticles() {
         const articleData = doc.data();
        const articleElement = document.createElement("div");
        articleElement.className = "article-card";
+
+       let dateText = "";
+       if (articleData.createdAt) {
+        try {
+            dateText = new Date(articleData.createdAt.toDate()).toLocaleDateString();
+        } catch (e) {
+            dateText = "Date inconnue";
+        }
+       }
        articleElement.innerHTML = `
        <h3>${articleData.title}</h3>
        <p> Par ${articleData.userName}</p>
@@ -285,10 +296,12 @@ async function loadArticles() {
        });
         showMessage("Article récupéré avec succès", "success");
     } catch (error) {
+        console.error("Erreur détaillée:", error);
         showMessage("Erreur lors du chargement de l'article", "error");
+    } finally {
+        isLoadingArticles = false;
     }
 }
-
 // ========================================
 // DÉCONNEXION
 // ========================================
@@ -304,3 +317,9 @@ function logout() {
             });
     }
 }
+
+firebase.firestore().enableNetwork().then(() => {
+    console.log("Firestore connecté");
+}).catch((error) => {
+    console.error("Erreur Firestore:", error);
+});
