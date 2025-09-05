@@ -22,12 +22,13 @@ let isLoadingArticles = false;   // Flag de chargement
 // MODAL
 function openModal(modalId) {
     const modal = document.getElementById(modalId);
-    modal.style.display = "block";
+    modal.classList.add('active');
 }
 
 function closeModal(modalId) {
     const modal = document.getElementById(modalId);
-    modal.style.display = "none";
+    modal.addEventListener('click');
+    modal.classList.remove('active');
 }
 
 function showMessage(message, type) {
@@ -260,6 +261,32 @@ async function handleArticleSubmit(e) {
         showMessage("Erreur lors de la sauvegarde", "error");
     }
 
+}
+
+async function loadArticles() {
+    const container = document.getElementById('articlesContainer');
+    container.innerHTML = "";
+       try {
+            const snapshot = await db.collection('articles').get();
+            if (snapshot.empty) {
+            container.innerHTML = `<div> Aucun article trouvé </div>`;
+            return;
+        }
+       snapshot.forEach(doc => {
+        const articleData = doc.data();
+       const articleElement = document.createElement("div");
+       articleElement.className = "article-card";
+       articleElement.innerHTML = `
+       <h3>${articleData.title}</h3>
+       <p> Par ${articleData.userName}</p>
+       <div>${articleData.content} - ${new Date(articleData.createdAt?.toDate()).toLocaleDateString()}</div>
+       `;
+       container.appendChild(articleElement);
+       });
+        showMessage("Article récupéré avec succès", "success");
+    } catch (error) {
+        showMessage("Erreur lors du chargement de l'article", "error");
+    }
 }
 
 // ========================================
