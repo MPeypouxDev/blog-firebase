@@ -26,8 +26,8 @@ function openModal(modalId) {
 }
 
 function closeModal(modalId) {
-    const modal = document.getElementById(modalId);
-    modal.classList.remove('active');
+  const modal = document.getElementById(modalId);
+  modal.classList.remove("active");
 }
 
 function showMessage(message, type) {
@@ -262,7 +262,7 @@ async function handleArticleSubmit(e) {
     content: content,
     userName: name,
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    isPublished: isPublished,
+    published: isPublished,
   };
 
   try {
@@ -276,43 +276,132 @@ async function handleArticleSubmit(e) {
 }
 
 async function loadArticles() {
-    if (isLoadingArticles) return;
-    isLoadingArticles = true;
+  if (isLoadingArticles) return;
+  isLoadingArticles = true;
 
-    const container = document.getElementById('articlesContainer');
-    container.innerHTML = "";
-       try {
-            const snapshot = await db.collection('articles').get();
-            if (snapshot.empty) {
-            container.innerHTML = `<div> Aucun article trouvé </div>`;
-            return;
-        }
-       snapshot.forEach(doc => {
-        const articleData = doc.data();
-       const articleElement = document.createElement("div");
-       articleElement.className = "article-card";
+  const container = document.getElementById("articlesContainer");
+  container.innerHTML = "";
+  try {
+    const snapshot = await db.collection("articles").get();
+    if (snapshot.empty) {
+      container.innerHTML = `<div> Aucun article trouvé </div>`;
+      isLoadingArticles = false;
+      return;
+    }
+    snapshot.forEach((doc) => {
+      const articleData = doc.data();
+      const articleId = doc.id;
+      const articleElement = document.createElement("div");
+      articleElement.className = "article-card";
 
-       let dateText = "";
-       if (articleData.createdAt) {
+      let dateText = "";
+      if (articleData.createdAt) {
         try {
-            dateText = new Date(articleData.createdAt.toDate()).toLocaleDateString();
+          dateText = new Date(
+            articleData.createdAt.toDate()
+          ).toLocaleDateString();
         } catch (e) {
-            dateText = "Date inconnue";
+          dateText = "Date inconnue";
         }
-       }
-       articleElement.innerHTML = `
+      }
+      articleElement.innerHTML = `
        <h3>${articleData.title}</h3>
        <p> Par ${articleData.userName}</p>
-       <div>${articleData.content} - ${new Date(articleData.createdAt?.toDate()).toLocaleDateString()}</div>
+       <div>${articleData.content} - ${dateText}</div>
+
+       <div class= "comments-section">
+       <h4> Commentaires </h4>
+       <div class= "comments-form" id="commentForm-${articleId}">
+       <textarea id="commentText-${articleId}" placeholder="Ajouter un commentaire..." rows="3"></textarea>
+       <button onclick="addComment('${articleId}')" class="btn-primary">Publier</button>
+       </div>
+       <div class="comments-list" id="commentsList-${articleId}">
+                        <p>Chargement des commentaires...</p>
+                    </div>
+                </div>
        `;
-       container.appendChild(articleElement);
-       });
-        showMessage("Article récupéré avec succès", "success");
+      container.appendChild(articleElement);
+      loadComments(articleId);
+    });
+    showMessage("Article récupéré avec succès", "success");
+  } catch (error) {
+    console.error("Erreur détaillée:", error);
+    showMessage("Erreur lors du chargement de l'article", "error");
+  } finally {
+    isLoadingArticles = false;
+  }
+}
+
+async function addComment(articleId) {
+    const textArea = document.getElementById(`commentText-${articleId}`);
+    const content = textArea.value.trim();
+
+    if(!content) {
+        showMessage("Veuillez entrer un commentaire", "error");
+        return;
+    }
+
+    if (!auth.currentUser) {
+        showMessage("Vous devez être connecté pour ajouter un commentaire", "error");
+        return;
+    }
+
+    try {
+        await db.collection('comments').add({
+            articleId: articleId,
+            userId: auth.currentUser.uid,
+            userName: auth.currentUser.displayName || auth.currentUser.email || "Anonyme",
+            content: content,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        textArea.value = "";
+        showMessage("Commentaire ajouté", "success");
+        loadComments(articleId);
     } catch (error) {
-        console.error("Erreur détaillée:", error);
-        showMessage("Erreur lors du chargement de l'article", "error");
-    } finally {
-        isLoadingArticles = false;
+        console.error("Erreur de l'ajout du commentaire", error);
+        showMessage("Erreur lors de l'ajout du commentaire", "error");
+    }
+}
+
+async function loadComments(articleId) {
+    const commentsList = document.getElementById(`commentsList-${articleId}`);
+
+    try {
+        const snapshot = await db.collection('comments')
+        .where('articleId', '==', articleId)
+        .orderBy('createdAt', 'desc')
+        .get();
+
+        if (snapshot.empty) {
+            commentsList.innerHTML = '<p> Aucun commentaire pour le moment.</p>';
+            return;
+        }
+
+        commentsList.innerHTML = '';
+        snapshot.forEach(doc => {
+            const commentData = doc.data();
+            const commentElement = document.createElement('div');
+            commentElement.className = 'comment';
+
+            let commentDate = "Date inconnue";
+            if (commentData.createdAt) {
+                try {
+                    commentDate = new Date(commentData.createdAt.toDate()).toLocaleDateString();
+                } catch (e) {
+                    commentDate = "Date inconnue";
+                }
+            }
+            commentElement.innerHTML = `
+                <div class="comment-author">${commentData.userName}</div>
+                <div class="comment-content">${commentData.content}</div>
+                <div class="comment-date">${commentDate}</div>
+            `;
+
+            commentsList.appendChild(commentElement);
+        });
+    } catch (error) {
+        console.error("Erreur chargement commentaires", error);
+        commentsList.innerHTML = '<p> Erreur lors du chargement des commentaires.</p>';
     }
 }
 // ========================================
@@ -332,8 +421,12 @@ function logout() {
   }
 }
 
-firebase.firestore().enableNetwork().then(() => {
+firebase
+  .firestore()
+  .enableNetwork()
+  .then(() => {
     console.log("Firestore connecté");
-}).catch((error) => {
+  })
+  .catch((error) => {
     console.error("Erreur Firestore:", error);
-});
+  });
