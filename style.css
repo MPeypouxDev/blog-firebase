@@ -7,10 +7,20 @@
     box-sizing: border-box;
 }
 
+:root {
+    --glass-bg: rgba(255, 255, 255, 0.1);
+    --gradient-glass: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  --border-glass: 1px solid rgba(255, 255, 255, 0.2);
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     line-height: 1.6;
-    background: ;
+    background-image: url(/assets/background.png);
     min-height: 100vh;
 }
 
@@ -34,8 +44,10 @@ body.dark-mode {
    HEADER
    ===================== */
 header {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
+    background: #9e9e9e85;
+    /* border: var(--border-glass); */
+    /* box-shadow: var(--glass-bg); */
+    /* backdrop-filter: blur(5px); */
     padding: 20px;
     border-radius: 10px;
     margin-bottom: 30px;
