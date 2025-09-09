@@ -116,6 +116,7 @@ auth.onAuthStateChanged(async (user) => {
     document.getElementById("loginBtn").style.display = "none";
     document.getElementById("registerBtn").style.display = "none";
     document.getElementById("logoutBtn").style.display = "block";
+    document.getElementById("userPanel").style.display = "block";
 
     if (isAdmin) {
       document.getElementById("adminPanel").style.display = "block";
