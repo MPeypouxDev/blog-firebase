@@ -14,10 +14,21 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 
 // VARIABLES GLOBALES
+let activeFilters = {
+  author: null,
+  date: null,
+  popularity: null,
+  status: null
+};
 let currentUser = null; // Utilisateur connecté
 let currentEditingArticle = null; // Article en cours d'édition
 let isAdmin = false; // Statut admin
 let isLoadingArticles = false; // Flag de chargement
+let currentPage = 1;
+let articlesPerPage = 4;
+let totalPages = 0;
+let lastDocuments = {};
+let pageArticleCounts = {};
 
 // MODAL
 function openModal(modalId) {
@@ -46,6 +57,26 @@ function showMessage(message, type) {
   setTimeout(() => {
     content.remove();
   }, 3000);
+}
+
+function getDateFilter(dateType) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  switch(dateType) {
+    case 'today':
+      return today;
+      case 'week':
+        const weekAgo = new Date(today);
+        weekAgo.setDate(today.getDate() - 7);
+        return weekAgo;
+        case 'month':
+          const monthAgo = new Date(today);
+          monthAgo.setMonth(today.getMonth() - 1);
+          return monthAgo;
+          default:
+            return null;
+  }
 }
 
 // OBSERVER D'AUTHENTIFICATION
@@ -88,8 +119,10 @@ auth.onAuthStateChanged(async (user) => {
 
     if (isAdmin) {
       document.getElementById("adminPanel").style.display = "block";
+      document.getElementById("statusFilterGroup").style.display = "block";
     }
   } else {
+    document.getElementById("statusFilterGroup").style.display = "none";
     console.log("👤 Utilisateur déconnecté");
 
     // Réinitialisation
@@ -102,7 +135,8 @@ auth.onAuthStateChanged(async (user) => {
   }
 
   // Recharger les articles
-  loadArticles();
+  loadArticles(1);
+  loadAuthors();
 });
 
 // EVENT LISTENERS
@@ -117,6 +151,8 @@ document.addEventListener("DOMContentLoaded", () => {
     .addEventListener("click", () => openModal("registerModal"));
 
   document.getElementById("logoutBtn").addEventListener("click", logout);
+  document.getElementById('applyFilters').addEventListener('click', applyFilters);
+  document.getElementById('clearFilters').addEventListener('click', clearFilters);
 
   // Bouton nouvel article (admin)
   const newArticleBtn = document.getElementById("newArticleBtn");
@@ -266,33 +302,94 @@ async function handleArticleSubmit(e) {
   };
 
   try {
-    await db.collection("articles").add(articleData);
+    if(currentEditingArticle === null) {
+      await db.collection("articles").add(articleData);
     showMessage("Article créé avec succès", "success");
+  } else {
+    const updateData = {
+      title: title,
+      content: content,
+      published: isPublished,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    await db.collection("articles").doc(currentEditingArticle).update(updateData);
+    showMessage("Article modifié avec succès", "success");
+  }
     closeModal("articleModal");
     document.getElementById("articleForm").reset();
+    currentEditingArticle = null;
   } catch (error) {
     showMessage("Erreur lors de la sauvegarde", "error");
   }
 }
 
-async function loadArticles() {
+async function loadArticles(page = 1) {
   if (isLoadingArticles) return;
   isLoadingArticles = true;
+  currentPage = page;
 
   const container = document.getElementById("articlesContainer");
   container.innerHTML = "";
   try {
-    const snapshot = await db.collection("articles").get();
-    if (snapshot.empty) {
+    let query = db.collection("articles");
+
+    if (activeFilters.author) {
+      query = query.where('userName', "==", activeFilters.author);
+    }
+    if (activeFilters.status && isAdmin) {
+      const statusBool = activeFilters.status === 'true';
+      query = query.where('published', '==', statusBool);
+    }
+    query = query.orderBy('createdAt', 'desc');
+
+    if (page > 1 && lastDocuments[page - 1]) {
+      query = query.startAfter(lastDocuments[page - 1]);
+    }
+    const needsClientFiltering = activeFilters.date || activeFilters.popularity;
+    const queryLimit = needsClientFiltering ? articlesPerPage * 3 : articlesPerPage;
+    query = query.limit(queryLimit);   
+    const snapshot = await query.get();
+
+    if (snapshot.empty && page === 1) {
       container.innerHTML = `<div> Aucun article trouvé </div>`;
-      isLoadingArticles = false;
       return;
+    }
+
+    pageArticleCounts[page] = snapshot.size;
+    if (snapshot.size > 0) {
+      lastDocuments[page] = snapshot.docs[snapshot.docs.length - 1];
+    }
+    if (snapshot.size < articlesPerPage) {
+      totalPages = page;
+    } else {
+      totalPages =  Math.max(page + 1, totalPages);
     }
     snapshot.forEach((doc) => {
       const articleData = doc.data();
       const articleId = doc.id;
+      const likesCount = articleData.likedBy ? articleData.likedBy.length : 0;
       const articleElement = document.createElement("div");
       articleElement.className = "article-card";
+
+      if(activeFilters.date) {
+        const filterDate = getDateFilter(activeFilters.date);
+        if (filterDate && articleData.createdAt) {
+          const articleDate = articleData.createdAt.toDate();
+          if (articleDate < filterDate) {
+            return;
+          }
+        }
+      }
+
+      if (activeFilters.popularity) {
+        const likesCount = articleData.likedBy ? articleData.likedBy.length : 0;
+        if (activeFilters.popularity === 'popular' && likesCount < 2) {
+          return;
+        }
+        if (activeFilters.popularity === 'most-popular' && likesCount < 5) {
+          return;
+        }
+      }
 
       let dateText = "";
       if (articleData.createdAt) {
@@ -309,11 +406,17 @@ async function loadArticles() {
        <p> Par ${articleData.userName}</p>
        <div>${articleData.content} - ${dateText}</div>
 
+       <div class="article-actions" id="actions-${articleId}" style="display:none;">
+       <button onclick="editArticle('${articleId}')" class="btn-secondary btn-small">Modifier</button>
+       <button onclick="deleteArticle('${articleId}')" class="btn-danger btn-small" id="delete-${articleId}" style="display:none;">Supprimer</button>
+       </div>
+
        <div class= "comments-section">
        <h4> Commentaires </h4>
        <div class= "comments-form" id="commentForm-${articleId}">
        <textarea id="commentText-${articleId}" placeholder="Ajouter un commentaire..." rows="3"></textarea>
-       <button onclick="addComment('${articleId}')" class="btn-primary">Publier</button>
+       <button onclick="addComment('${articleId}')"class="btn-primary">Publier</button>
+       <button onclick= "addLike('${articleId}')"class="btn-primary">❤️ ${likesCount}</button>
        </div>
        <div class="comments-list" id="commentsList-${articleId}">
                         <p>Chargement des commentaires...</p>
@@ -322,14 +425,166 @@ async function loadArticles() {
        `;
       container.appendChild(articleElement);
       loadComments(articleId);
+      if(auth.currentUser) {
+      const actionsDiv = document.getElementById(`actions-${articleId}`);
+      const deleteBtn = document.getElementById(`delete-${articleId}`);
+      const canEdit = isAdmin || (articleData.userName === auth.currentUser.displayName);
+      const canDelete = isAdmin;
+      if(canEdit) {
+        actionsDiv.style.display = 'flex';
+      }
+      if(canDelete) {
+        deleteBtn.style.display = 'inline-block';
+      }
+    }
     });
     showMessage("Article récupéré avec succès", "success");
+    displayPagination();
   } catch (error) {
     console.error("Erreur détaillée:", error);
     showMessage("Erreur lors du chargement de l'article", "error");
   } finally {
     isLoadingArticles = false;
   }
+}
+
+async function editArticle(articleId) {
+  try {
+    const getArticle = await db.collection('articles').doc(articleId).get();
+    
+    if(getArticle && getArticle.exists) {
+      const articleData = getArticle.data();
+
+      document.getElementById('articleTitle').value = articleData.title;
+      document.getElementById('articleContent').value = articleData.content;
+      document.getElementById('articlePublished').checked = articleData.published;
+
+      currentEditingArticle = articleId;
+      document.getElementById('articleModalTitle').textContent = 'Modifier l\'article';
+      openModal('articleModal');
+    } else {
+      showMessage("Article non trouvé", "error");
+    }
+  } catch (error) {
+    console.error("Erreur lors de la récupération:", error);
+    showMessage("Erreur lors du chargement de l'article", "error");
+  }
+}
+
+async function deleteArticle(articleId) {
+  if(!isAdmin) {
+    showMessage("Seuls les admins peuvent supprimer des articles");
+    return;
+  }
+  if(!confirm("Etes-vous sur de vouloir supprimer cet article ? Cette action est irréversible.")) {
+    return;
+  }
+  try {
+    await db.collection('articles').doc(articleId).delete();
+    showMessage("Article supprimé avec succès", "success");
+    loadArticles(1);
+  } catch (error) {
+    console.error("Erreur suppression:", error);
+    showMessage("Erreur lors de la suppression", "error");
+  }
+}
+
+async function loadAuthors() {
+    try {
+        const snapshot = await db.collection('articles').get();
+        const authors = new Set();
+        
+        snapshot.forEach(doc => {
+            const articleData = doc.data();
+            if (articleData.userName) {
+                authors.add(articleData.userName);
+            }
+        });
+        
+        const authorSelect = document.getElementById('filterAuthor');
+        authorSelect.innerHTML = '<option value="">Tous les auteurs</option>';
+        
+        authors.forEach(author => {
+            const option = document.createElement('option');
+            option.value = author;
+            option.textContent = author;
+            authorSelect.appendChild(option);
+        });
+        
+    } catch (error) {
+        console.error('Erreur lors du chargement des auteurs:', error);
+    }
+}
+ 
+
+function displayPagination() {
+  console.log("Pagination - Page actuelle:", currentPage);
+    console.log("Pagination - Total pages:", totalPages);
+    console.log("Pagination - Articles cette page:", pageArticleCounts[currentPage]);
+
+  let paginationContainer = document.getElementById('paginationContainer');
+  if (!paginationContainer) {
+    paginationContainer = document.createElement('div');
+    paginationContainer.id = 'paginationContainer';
+    paginationContainer.className = 'pagination';
+    document.getElementById('articlesContainer').after(paginationContainer);
+  }
+  paginationContainer.innerHTML = '';
+
+  if (currentPage > 1) {
+    const prevBtn = document.createElement('button');
+    prevBtn.textContent = 'Précédent';
+    prevBtn.className = 'btn-secondary';
+    prevBtn.onclick = () => loadArticles(currentPage - 1);
+    paginationContainer.appendChild(prevBtn);
+  }
+  for (let i = 1; i <= Math.max(currentPage, totalPages); i++) {
+    const pageBtn = document.createElement('button');
+    pageBtn.textContent = i;
+    pageBtn.className = i === currentPage ? 'btn-primary' : 'btn-secondary';
+    pageBtn.onclick = () => loadArticles(i);
+    paginationContainer.appendChild(pageBtn);
+  }
+
+  if (pageArticleCounts[currentPage] === articlesPerPage) {
+    const nextBtn = document.createElement('button');
+    nextBtn.textContent = 'Suivant';
+    nextBtn.className = 'btn-secondary';
+    nextBtn.onclick = () => loadArticles(currentPage + 1);
+    paginationContainer.appendChild(nextBtn);
+  }
+}
+
+function applyFilters() {
+  activeFilters.author = document.getElementById('filterAuthor').value || null;
+  activeFilters.date = document.getElementById('filterDate').value || null;
+  activeFilters.popularity = document.getElementById('filterPopularity').value || null;
+  activeFilters.status = document.getElementById('filterStatus').value || null;
+
+  currentPage = 1;
+  lastDocuments = {};
+  pageArticleCounts = {};
+  totalPages = 0;
+
+  loadArticles(1);
+}
+
+function clearFilters() {
+  activeFilters = {
+    author: null,
+    date: null,
+    popularity: null,
+    status: null
+  };
+  document.getElementById('filterAuthor').value = "";
+  document.getElementById('filterDate').value = "";
+  document.getElementById('filterPopularity').value = "";
+  document.getElementById('filterStatus').value = "";
+  currentPage = 1;
+  lastDocuments = {};
+  pageArticleCounts = {};
+  totalPages = 0;
+  loadArticles(1);
 }
 
 async function addComment(articleId) {
@@ -361,6 +616,47 @@ async function addComment(articleId) {
         console.error("Erreur de l'ajout du commentaire", error);
         showMessage("Erreur lors de l'ajout du commentaire", "error");
     }
+}
+
+async function updateLikeButton(articleId) {
+  try {
+    const articleDoc = await db.collection('articles').doc(articleId).get();
+    const articleData = articleDoc.data();
+    const likesCount = articleData.likedBy ? articleData.likedBy.length : 0;
+    const button = document.querySelector(`button[onclick="addLike('${articleId}')"]`);
+    if (button) {
+      button.textContent = `❤️ ${likesCount}`;
+    }
+  } catch (error) {
+    console.error("Erreur mise à jour bouton", error);
+  }
+}
+
+async function addLike(articleId) {
+  if (!auth.currentUser) {
+        showMessage("Vous devez être connecté pour ajouter un like", "error");
+        return;
+    }
+    try {
+    const articleRef = db.collection('articles').doc(articleId);
+    const articleDoc = await articleRef.get();
+    const articleData = articleDoc.data();
+    const likedBy = articleData.likedBy || [];
+    const userHasLiked = likedBy.includes(auth.currentUser.uid);
+    if (userHasLiked) {
+     await articleRef.update({
+        likedBy: firebase.firestore.FieldValue.arrayRemove(auth.currentUser.uid)
+      });
+    } else {
+      await articleRef.update({
+        likedBy: firebase.firestore.FieldValue.arrayUnion(auth.currentUser.uid)
+      });
+    }
+    updateLikeButton(articleId);
+  } catch (error) {
+    console.error("Erreur like:", error);
+    showMessage("Erreur lors de la mise à jour du like", "error");
+  }
 }
 
 async function loadComments(articleId) {

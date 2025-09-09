@@ -27,6 +27,48 @@
             <button id="newArticleBtn" class="btn-primary">✍️ Nouvel Article</button>
         </div>
 
+        <!-- Panel Filters -->
+            <div class="title-panel">
+                <h3>Filtres</h3>
+            </div> 
+            <div id="filtersPanel" class="filters-panel">
+            <div class="filter-group">
+                <label>Auteur</label>
+                <select id="filterAuthor">
+                    <option value="">Tous les auteurs</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Date</label>
+                <select id="filterDate">
+                    <option value="">Toutes les dates</option>
+                    <option value="today">Aujourd'hui</option>
+                    <option value="week">Cette semaine</option>
+                    <option value="month">Ce mois</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Popularité</label>
+                <select id="filterPopularity">
+                    <option value="">Tous</option>
+                    <option value="popular">Plus de 2 likes</option>
+                    <option value="most-popular">Plus de 5 likes</option>
+                </select>
+            </div>
+            <div class="filter-group" id="statusFilterGroup">
+                <label>Statut</label>
+                <select id="filterStatus">
+                    <option value="">Tous les statuts</option>
+                    <option value="true">Publiés</option>
+                    <option value="false">Brouillons</option>
+                </select>
+            </div>
+            <div class="filter-buttons">
+                <button id="applyFilters" class="btn-apply">Appliquer</button>
+                <button id="clearFilters" class="btn-clear">Effacer</button>
+            </div>
+         </div>
+
         <!-- Zone de messages -->
         <div id="messageContainer"></div>
 
