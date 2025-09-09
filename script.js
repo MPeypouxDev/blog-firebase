@@ -348,6 +348,7 @@ async function handleArticleSubmit(e) {
     closeModal("articleModal");
     document.getElementById("articleForm").reset();
     currentEditingArticle = null;
+    loadArticles(1);
   } catch (error) {
     showMessage("Erreur lors de la sauvegarde", "error");
   }
