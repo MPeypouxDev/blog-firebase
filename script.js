@@ -118,12 +118,14 @@ auth.onAuthStateChanged(async (user) => {
     document.getElementById("logoutBtn").style.display = "block";
     document.getElementById("userPanel").style.display = "block";
 
-    if (isAdmin) {
-      document.getElementById("adminPanel").style.display = "block";
-      document.getElementById("statusFilterGroup").style.display = "block";
+    document.getElementById("userPanel").style.display = "block";
+  if (isAdmin) {
+    document.getElementById("adminPanel").style.display = "block";
+    document.getElementById("statusFilterGroup").style.display = "block";
     }
   } else {
     document.getElementById("statusFilterGroup").style.display = "none";
+    document.getElementById("userPanel").style.display = "none";
     console.log("👤 Utilisateur déconnecté");
 
     // Réinitialisation
@@ -166,6 +168,32 @@ document.addEventListener("DOMContentLoaded", () => {
       openModal("articleModal");
     });
   }
+  const newUserArticleBtn = document.getElementById("newUserArticleBtn");
+  if (newUserArticleBtn) {
+  newUserArticleBtn.addEventListener("click", () => {
+    currentEditingArticle = null;
+    document.getElementById("articleModalTitle").textContent = "Créer un Article";
+    document.getElementById("articleForm").reset();
+    openModal("articleModal");
+    if (!auth.currentUser) {
+      showMessage("Vous devez être connecté", "error");
+      return;
+    }
+    document.getElementById("articlePublished").checked = false;
+  });
+}
+const myArticlesBtn = document.getElementById("myArticlesBtn");
+if (myArticlesBtn) {
+  myArticlesBtn.addEventListener("click", () => {
+    if (!auth.currentUser) {
+      showMessage("Vous devez être connecté", "error");
+      return;
+    }
+    // Filtrer par l'utilisateur actuel
+    activeFilters.author = auth.currentUser.displayName || auth.currentUser.email;
+    loadArticles(1);
+  });
+}
 
   // Formulaires
   document.getElementById("loginForm").addEventListener("submit", handleLogin);
@@ -298,6 +326,7 @@ async function handleArticleSubmit(e) {
     title: title,
     content: content,
     userName: name,
+    userId: auth.currentUser.uid,
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     published: isPublished,
   };
@@ -429,7 +458,7 @@ async function loadArticles(page = 1) {
       if(auth.currentUser) {
       const actionsDiv = document.getElementById(`actions-${articleId}`);
       const deleteBtn = document.getElementById(`delete-${articleId}`);
-      const canEdit = isAdmin || (articleData.userName === auth.currentUser.displayName);
+      const canEdit = isAdmin || (articleData.userId === auth.currentUser.uid);
       const canDelete = isAdmin;
       if(canEdit) {
         actionsDiv.style.display = 'flex';
